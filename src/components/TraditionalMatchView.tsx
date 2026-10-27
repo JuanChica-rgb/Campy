@@ -2,8 +2,14 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { StudentCard } from './StudentCard';
 import { ProfileModal } from './ProfileModal';
-import { Flame, RefreshCw, Sparkles, Filter, ShieldCheck, MapPin } from 'lucide-react';
-import { User } from '../types';
+import { ReportSheet } from './ReportSheet';
+import { DeckEmpty } from './DeckEmpty';
+import { PlusSheet } from './PlusSheet';
+import { hasPlus } from '../lib/plus';
+import { showSwipeAd } from '../lib/googleAds';
+import type { User } from '../types';
+
+const AD_EVERY = 5;
 
 export const TraditionalMatchView: React.FC = () => {
   const {
@@ -11,105 +17,218 @@ export const TraditionalMatchView: React.FC = () => {
     users,
     swipedUserIds,
     handleSwipe,
+    rewindLastPass,
     resetSwipes,
     selectedProfileUser,
-    setSelectedProfileUser
+    setSelectedProfileUser,
+    discovery,
+    outreach,
+    sendSuperLike,
+    sendNote,
+    setCurrentTab,
+    openChat,
+    isBlocked
   } = useApp();
 
-  const [careerFilter, setCareerFilter] = useState<string>('all');
+  const [plusOpen, setPlusOpen] = useState(false);
+  const [plusHighlight, setPlusHighlight] = useState<'superlike' | 'note' | 'rewind'>('superlike');
+  const [noteTarget, setNoteTarget] = useState<User | null>(null);
+  const [noteBody, setNoteBody] = useState('');
+  const [noteError, setNoteError] = useState('');
+  const [adCount, setAdCount] = useState(0);
+  const [reportTarget, setReportTarget] = useState<User | null>(null);
 
-  // Filter candidates: only approved, not current user, not swiped in this session
-  const candidateUsers = users.filter(user => {
+  const matchesPrefs = (user: User) => {
+    if (user.age < discovery.ageMin || user.age > discovery.ageMax) return false;
+    if (discovery.interestIn === 'mujeres' && user.gender && user.gender !== 'mujer') return false;
+    if (discovery.interestIn === 'hombres' && user.gender && user.gender !== 'hombre') return false;
+    return true;
+  };
+
+  const pool = users.filter(user => {
     if (user.id === currentUser.id) return false;
     if (user.verificationStatus !== 'approved') return false;
     if (user.role === 'admin') return false;
+    if (isBlocked(user.id)) return false;
+    if (user.privateProfile) return false;
     if (swipedUserIds.has(user.id)) return false;
-    if (careerFilter !== 'all' && !user.career.toLowerCase().includes(careerFilter.toLowerCase())) return false;
     return true;
   });
+  const activeCardUser = pool.find(matchesPrefs);
+  const filteredOutByPrefs = !activeCardUser && pool.length > 0;
 
-  const activeCardUser = candidateUsers[0];
+  const plus = hasPlus(currentUser);
+
+  const openPlus = (feature: 'superlike' | 'note' | 'rewind' = 'superlike') => {
+    setPlusHighlight(feature);
+    setPlusOpen(true);
+  };
+
+  const swipe = (userId: string, action: 'like' | 'pass') => {
+    handleSwipe(userId, action, 'traditional');
+    setAdCount(count => {
+      const next = count + 1;
+      if (next >= AD_EVERY) {
+        void showSwipeAd();
+        return 0;
+      }
+      return next;
+    });
+  };
+
+  const superLike = (target: User) => {
+    if (!plus) {
+      openPlus('superlike');
+      return;
+    }
+    const existing = outreach.find(
+      row => row.kind === 'superlike' && row.fromId === currentUser.id && row.toId === target.id
+    );
+    if (existing) {
+      setCurrentTab('chats');
+      openChat(existing.id, 'outreach');
+      return;
+    }
+    void sendSuperLike(target.id).then(error => {
+      if (!error) {
+        swipe(target.id, 'pass');
+        setCurrentTab('chats');
+        openChat(`out_superlike_${currentUser.id}_${target.id}`, 'outreach');
+      }
+    });
+  };
+
+  const openNote = (target: User) => {
+    if (!plus) {
+      openPlus('note');
+      return;
+    }
+    const existing = outreach.find(
+      row => row.kind === 'note' && row.fromId === currentUser.id && row.toId === target.id
+    );
+    if (existing) {
+      setCurrentTab('chats');
+      openChat(existing.id, 'outreach');
+      return;
+    }
+    setNoteBody('');
+    setNoteError('');
+    setNoteTarget(target);
+  };
+
+  const submitNote = async () => {
+    if (!noteTarget) return;
+    const error = await sendNote(noteTarget.id, noteBody);
+    if (error) {
+      setNoteError(error);
+      return;
+    }
+    const id = `out_note_${currentUser.id}_${noteTarget.id}`;
+    setNoteTarget(null);
+    setCurrentTab('chats');
+    openChat(id, 'outreach');
+  };
 
   return (
-    <div className="flex flex-col items-center justify-center py-6 px-4">
-      {/* Subheader with filter */}
-      <div className="w-full max-w-md flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-rose-500/10 text-rose-400">
-            <Flame className="h-4 w-4 fill-rose-500" />
-          </span>
-          <h1 className="text-base font-bold text-white font-display">Match Universitario</h1>
+    <div className="mx-auto flex h-full min-h-0 w-full max-w-[420px] flex-col px-3 py-2 md:max-w-[480px] md:py-6 lg:max-w-[520px]">
+      {currentUser.privateProfile && (
+        <p className="mb-2 rounded-xl border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-center text-[11px] leading-relaxed text-rose-100">
+          Tu perfil está privado: no harás match y nadie te verá. En grupos apareces como Anónimo.
+        </p>
+      )}
+      {activeCardUser ? (
+        <div className="flex min-h-0 flex-1 items-stretch justify-center">
+          <StudentCard
+            key={activeCardUser.id}
+            user={activeCardUser}
+            onRewind={() => {
+              if (!plus) {
+                openPlus('rewind');
+                return;
+              }
+              rewindLastPass('traditional');
+            }}
+            onMessage={() => openNote(activeCardUser)}
+            onLike={() => swipe(activeCardUser.id, 'like')}
+            onPass={() => swipe(activeCardUser.id, 'pass')}
+            onSuperlike={() => superLike(activeCardUser)}
+            onReport={() => setReportTarget(activeCardUser)}
+            onOpenDetails={() => setSelectedProfileUser(activeCardUser)}
+          />
         </div>
+      ) : (
+        <DeckEmpty
+          photoUrl={currentUser.photoUrl}
+          hint={
+            filteredOutByPrefs
+              ? 'Hay perfiles, pero no coinciden con tus filtros. Abre el ícono de filtros arriba y cambia “Interesado en” o la edad.'
+              : undefined
+          }
+          onReplay={() => resetSwipes('traditional')}
+        />
+      )}
 
-        <div className="flex items-center gap-2">
-          <select
-            value={careerFilter}
-            onChange={e => setCareerFilter(e.target.value)}
-            className="rounded-lg bg-slate-800 border border-slate-700 px-2.5 py-1 text-xs text-slate-300 focus:outline-none focus:border-rose-500"
-          >
-            <option value="all">Todas las facultades</option>
-            <option value="medicina">Medicina / Salud</option>
-            <option value="ing">Ingeniería / IA</option>
-            <option value="diseño">Diseño / Arte</option>
-            <option value="psicología">Psicología / Humanidades</option>
-            <option value="arquitectura">Arquitectura</option>
-          </select>
-        </div>
-      </div>
+      {plusOpen && <PlusSheet highlight={plusHighlight} onClose={() => setPlusOpen(false)} />}
 
-      {/* Card Deck or Empty State */}
-      <div className="relative w-full max-w-sm sm:max-w-md flex items-center justify-center min-h-[580px]">
-        {activeCardUser ? (
-          <div className="w-full flex justify-center">
-            <StudentCard
-              key={activeCardUser.id}
-              user={activeCardUser}
-              onLike={() => handleSwipe(activeCardUser.id, 'like', 'traditional')}
-              onPass={() => handleSwipe(activeCardUser.id, 'pass', 'traditional')}
-              onSuperlike={() => handleSwipe(activeCardUser.id, 'superlike', 'traditional')}
-              onOpenDetails={() => setSelectedProfileUser(activeCardUser)}
-            />
-          </div>
-        ) : (
-          <div className="w-full h-[500px] rounded-3xl bg-slate-800/60 border border-slate-700/60 flex flex-col items-center justify-center p-8 text-center text-slate-300">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-400 mb-4 border border-rose-500/20">
-              <Sparkles className="h-8 w-8" />
-            </div>
-            <h3 className="text-xl font-bold font-display text-white mb-1">
-              ¡Has visto a todos por ahora!
-            </h3>
-            <p className="text-xs text-slate-400 max-w-xs mb-6">
-              Ya exploraste a los estudiantes disponibles de tu facultad o campus. Vuelve a mezclar los perfiles para seguir conectando.
+      {noteTarget && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 px-3 pb-[calc(1rem+var(--campy-safe-bottom))] sm:items-center">
+          <div className="w-full max-w-sm rounded-3xl bg-slate-900 p-6 text-white">
+            <h2 className="text-lg font-semibold">
+              Un mensaje para {noteTarget.name.split(' ')[0]}
+            </h2>
+            <p className="mt-1 text-xs text-slate-400">
+              Solo puedes enviar uno. Si no quiere seguir, ahí queda.
             </p>
-
-            <button
-              onClick={() => resetSwipes('traditional')}
-              className="flex items-center gap-2 rounded-xl bg-rose-500 px-5 py-3 text-xs font-bold text-white shadow-lg shadow-rose-950/50 hover:bg-rose-600 transition active:scale-95"
-            >
-              <RefreshCw className="h-4 w-4" />
-              <span>Recargar Estudiantes de Campus</span>
-            </button>
+            <textarea
+              value={noteBody}
+              onChange={event => setNoteBody(event.target.value)}
+              maxLength={280}
+              rows={4}
+              className="mt-4 w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-sm outline-none"
+            />
+            {noteError && <p className="mt-2 text-xs text-rose-300">{noteError}</p>}
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setNoteTarget(null)}
+                className="flex-1 rounded-xl border border-white/10 py-2.5 text-sm"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => void submitNote()}
+                className="flex-1 rounded-xl bg-rose-500 py-2.5 text-sm font-semibold"
+              >
+                Enviar
+              </button>
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      {/* Profile Details Modal if opened */}
       {selectedProfileUser && (
         <ProfileModal
           user={selectedProfileUser}
           onClose={() => setSelectedProfileUser(null)}
-          onLike={id => {
-            handleSwipe(id, 'like', 'traditional');
+          onReport={() => {
+            const target = selectedProfileUser;
             setSelectedProfileUser(null);
+            if (target) setReportTarget(target);
           }}
-          onSuperlike={id => {
-            handleSwipe(id, 'superlike', 'traditional');
+          onSuperlike={() => {
+            const target = selectedProfileUser;
             setSelectedProfileUser(null);
+            if (target) superLike(target);
           }}
-          onPass={id => {
-            handleSwipe(id, 'pass', 'traditional');
-            setSelectedProfileUser(null);
-          }}
+        />
+      )}
+
+      {reportTarget && (
+        <ReportSheet
+          userId={reportTarget.id}
+          userName={reportTarget.name}
+          onClose={() => setReportTarget(null)}
         />
       )}
     </div>

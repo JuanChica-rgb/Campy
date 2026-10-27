@@ -1,0 +1,8 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Campy</string>
+    <string name="title_activity_main">Campy</string>
+    <string name="package_name">com.campy.universitario</string>
+    <string name="custom_url_scheme">com.campy.universitario</string>
+    <string name="admob_app_id">ca-app-pub-5089416524900846~1917993923</string>
+</resources>

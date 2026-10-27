@@ -1,133 +1,90 @@
 import React from 'react';
 import { User } from '../types';
-import { Shield, Sparkles, Heart, X, Star, GraduationCap, MapPin, Lock, BookOpen } from 'lucide-react';
+import { Heart, X, Star, Flag } from 'lucide-react';
 
 interface BlindCardProps {
   user: User;
   onLike: () => void;
   onPass: () => void;
   onSuperlike: () => void;
+  onReport?: () => void;
+}
+
+function firstLine(text: string) {
+  const sentence = text.split(/(?<=\.)\s/)[0] ?? text;
+  return sentence.length > 140 ? `${sentence.slice(0, 134).trim()}…` : sentence;
 }
 
 export const BlindCard: React.FC<BlindCardProps> = ({
   user,
   onLike,
   onPass,
-  onSuperlike
+  onSuperlike,
+  onReport
 }) => {
+  const line = user.blindBio ? firstLine(user.blindBio) : firstLine(user.bio);
+
   return (
-    <div className="relative w-full max-w-sm sm:max-w-md min-h-[580px] rounded-3xl overflow-hidden shadow-2xl bg-gradient-to-b from-slate-900 via-slate-900 to-indigo-950/70 border border-indigo-900/40 p-6 flex flex-col justify-between text-white select-none">
-      {/* Decorative neutral header & lock badge */}
-      <div>
-        <div className="flex items-center justify-between pb-4 border-b border-slate-800">
-          <div className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-              <Lock className="h-4 w-4" />
-            </span>
-            <div>
-              <p className="text-xs font-bold uppercase tracking-wider text-indigo-300">Cita a Ciegas</p>
-              <p className="text-[10px] text-slate-400">Fotografía oculta por seguridad y anonimato</p>
-            </div>
+    <div className="campy-card-in relative flex h-full min-h-0 w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-white/10 bg-slate-900 text-white shadow-[0_28px_50px_-18px_rgba(0,0,0,0.72)] select-none">
+      <div className="px-5 pb-4 pt-5">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex min-w-0 items-baseline gap-1.5">
+            <h2 className="truncate text-xl font-semibold font-display tracking-tight text-slate-100">{user.name}</h2>
+            <span className="text-sm font-medium text-slate-400">{user.age}</span>
           </div>
-
-          <span className="rounded-full bg-slate-800 px-2.5 py-1 text-[11px] font-semibold text-slate-300 border border-slate-700">
-            {user.semester}º Semestre
-          </span>
+          {onReport && (
+            <button
+              type="button"
+              onClick={onReport}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/10 text-slate-400 hover:border-rose-400/40 hover:text-rose-300"
+              title="Denunciar"
+              aria-label="Denunciar"
+            >
+              <Flag className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
+        <p className="mt-1 truncate text-[13px] font-semibold text-slate-200">{user.career}</p>
+        <p className="mt-0.5 truncate text-[11px] text-slate-400">{user.university}</p>
 
-        {/* Abstract Privacy Graphic Banner (no photo) */}
-        <div className="my-5 rounded-2xl bg-slate-800/60 border border-slate-700/60 p-6 flex flex-col items-center justify-center text-center relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500/10 via-rose-500/5 to-transparent pointer-events-none" />
-          
-          <div className="relative flex h-20 w-20 items-center justify-center rounded-3xl bg-indigo-950/60 text-indigo-300 border border-indigo-500/30 shadow-inner mb-3">
-            <Sparkles className="h-9 w-9" />
-          </div>
-
-          <div className="flex items-baseline gap-2">
-            <h2 className="text-2xl font-bold font-display text-white">{user.name}</h2>
-            <span className="text-xl font-light text-slate-300">{user.age} años</span>
-          </div>
-
-          <div className="flex items-center gap-1.5 text-xs text-indigo-300 mt-1">
-            <GraduationCap className="h-3.5 w-3.5" />
-            <span>{user.career}</span>
-          </div>
-
-          <p className="text-[11px] text-slate-400 mt-0.5">{user.university}</p>
-        </div>
-
-        {/* Short Bio */}
-        <div className="space-y-2">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-            Personalidad & Lo que busca
-          </h3>
-          <p className="text-xs text-slate-200 leading-relaxed bg-slate-800/40 p-3.5 rounded-xl border border-slate-800/80">
-            {user.bio}
-          </p>
-        </div>
-
-        {/* Blind prompt answers */}
-        {user.blindBio && (
-          <div className="mt-3.5 rounded-xl border border-indigo-500/20 bg-indigo-950/20 p-3 text-xs">
-            <p className="font-semibold text-indigo-300 mb-0.5 flex items-center gap-1">
-              <Sparkles className="h-3.5 w-3.5 text-indigo-400" />
-              <span>Pregunta rompehielos:</span>
-            </p>
-            <p className="text-slate-300 italic">"{user.blindBio}"</p>
-            {user.blindIdealSpot && (
-              <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mt-2 pt-1.5 border-t border-indigo-500/20">
-                <MapPin className="h-3 w-3 text-rose-400 shrink-0" />
-                <span>Spot favorito en campus: <strong className="text-slate-200">{user.blindIdealSpot}</strong></span>
-              </div>
-            )}
-          </div>
+        <p className="mt-4 text-[13px] leading-snug text-slate-300">{line}</p>
+        {user.blindIdealSpot && (
+          <p className="mt-2 text-[12px] text-slate-400">{user.blindIdealSpot}</p>
         )}
 
-        {/* Interests & Tags */}
-        <div className="mt-4">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-            Gustos en común
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {user.interests.map((tag, idx) => (
-              <span
-                key={idx}
-                className="rounded-lg bg-slate-800/80 border border-slate-700/60 px-2.5 py-1 text-xs font-medium text-slate-300"
-              >
-                {tag}
-              </span>
-            ))}
-          </div>
+        <div className="mt-4 flex flex-wrap gap-1.5">
+          {user.interests.slice(0, 3).map(tag => (
+            <span
+              key={tag}
+              className="rounded-md border border-white/10 bg-slate-800/80 px-2 py-0.5 text-[11px] font-medium text-slate-200"
+            >
+              {tag}
+            </span>
+          ))}
         </div>
       </div>
 
-      {/* Action Controls */}
-      <div className="flex items-center justify-center gap-5 pt-4 mt-4 border-t border-slate-800">
-        {/* Pass */}
+      <div className="flex shrink-0 items-center justify-center gap-4 border-t border-white/10 px-4 py-3">
         <button
           onClick={onPass}
-          className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-800/90 text-rose-400 border border-rose-500/30 shadow-lg shadow-black/40 hover:bg-rose-500 hover:text-white hover:scale-105 active:scale-95 transition"
+          className="flex h-11 w-11 items-center justify-center rounded-[1.15rem_1.4rem_1.2rem_1.05rem] border border-blue-300/25 bg-slate-900/80 text-slate-300 transition duration-200 ease-out hover:-translate-y-0.5 hover:border-blue-300/60 hover:text-white active:translate-y-0 active:scale-95"
           title="Pasar perfil anónimo"
         >
-          <X className="h-7 w-7" />
+          <X className="h-5 w-5" />
         </button>
-
-        {/* Superlike */}
         <button
           onClick={onSuperlike}
-          className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-800/90 text-amber-400 border border-amber-500/30 shadow-lg shadow-black/40 hover:bg-amber-500 hover:text-slate-950 hover:scale-105 active:scale-95 transition"
-          title="Cita a Ciegas Prioritaria"
+          className="flex h-10 w-10 items-center justify-center rounded-[1.35rem_1.05rem_1.25rem_1.15rem] border border-blue-400/50 bg-slate-900/50 text-blue-300 transition duration-200 ease-out hover:-translate-y-0.5 hover:bg-blue-500 hover:text-white active:translate-y-0 active:scale-95"
+          title="Cita a ciegas prioritaria"
         >
-          <Star className="h-6 w-6 fill-current" />
+          <Star className="h-5 w-5" />
         </button>
-
-        {/* Like */}
         <button
           onClick={onLike}
-          className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-r from-indigo-500 to-indigo-600 text-white shadow-xl shadow-indigo-950/60 hover:from-indigo-600 hover:to-indigo-700 hover:scale-105 active:scale-95 transition"
-          title="Conectar a Ciegas"
+          className="flex h-11 w-11 items-center justify-center rounded-[1.05rem_1.35rem_1.15rem_1.4rem] bg-[#F43F5E] text-white transition duration-200 ease-out hover:-translate-y-0.5 hover:bg-[#E11D48] active:translate-y-0 active:scale-95"
+          title="Conectar a ciegas"
         >
-          <Heart className="h-7 w-7 fill-white" />
+          <Heart className="h-5 w-5 fill-white" />
         </button>
       </div>
     </div>

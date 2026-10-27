@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Group, ChatMessage, User } from '../types';
+import { Group, User } from '../types';
 import {
   X,
   Send,
@@ -8,39 +8,49 @@ import {
   Shield,
   Trash2,
   UserMinus,
-  UserPlus,
+  Ban,
   Crown,
   Heart,
-  ChevronRight,
-  Info,
   Edit3,
-  Check
+  ImagePlus
 } from 'lucide-react';
+import { publicName, publicPhoto, canSeeRealIdentity } from '../lib/privacy';
+import { uploadGroupCover } from '../lib/photos';
 
 interface GroupChatModalProps {
   group: Group;
   onClose: () => void;
 }
 
-export const GroupChatModal: React.FC<GroupChatModalProps> = ({ group, onClose }) => {
+export const GroupChatModal: React.FC<GroupChatModalProps> = ({ group: groupProp, onClose }) => {
   const {
     currentUser,
     users,
+    groups,
     messages,
     sendMessage,
     deleteMessage,
     assignGroupAdmin,
     removeGroupAdmin,
     kickGroupMember,
+    banGroupMember,
+    matches,
     upvoteGroup,
+    updateGroup,
     setSelectedProfileUser
   } = useApp();
 
+  const group = groups.find(item => item.id === groupProp.id) ?? groupProp;
   const [inputText, setInputText] = useState('');
   const [showParticipants, setShowParticipants] = useState(false);
   const [isEditingInfo, setIsEditingInfo] = useState(false);
   const [editName, setEditName] = useState(group.name);
   const [editDesc, setEditDesc] = useState(group.description);
+  const [editCoverFile, setEditCoverFile] = useState<File | null>(null);
+  const [editCoverPreview, setEditCoverPreview] = useState(group.coverUrl);
+  const [editBusy, setEditBusy] = useState(false);
+  const [editError, setEditError] = useState('');
+  const coverInputRef = useRef<HTMLInputElement>(null);
 
   const groupMessages = messages[group.id] || [];
   const isCreator = group.creatorId === currentUser.id;
@@ -59,6 +69,7 @@ export const GroupChatModal: React.FC<GroupChatModalProps> = ({ group, onClose }
   };
 
   const handleMemberClick = (user: User) => {
+    if (!canSeeRealIdentity(currentUser.id, user, matches)) return;
     setSelectedProfileUser(user);
   };
 
@@ -81,17 +92,18 @@ export const GroupChatModal: React.FC<GroupChatModalProps> = ({ group, onClose }
                   <h3 className="text-sm font-bold text-white truncate max-w-[200px] sm:max-w-md">
                     {group.name}
                   </h3>
+                  {group.inviteCode && (
+                    <span className="shrink-0 rounded-md border border-white/10 bg-slate-800 px-1.5 py-0.5 font-mono text-[10px] tracking-widest text-slate-300">
+                      {group.inviteCode}
+                    </span>
+                  )}
                   {isAdmin && (
                     <span className="flex items-center gap-0.5 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-300 border border-amber-500/30">
                       <Shield className="h-3 w-3" /> Admin
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-2 text-xs text-slate-400">
-                  <span>{group.category}</span>
-                  <span aria-hidden="true">·</span>
-                  <span>{group.membersCount} miembros</span>
-                </div>
+                <p className="text-xs text-slate-400">{group.membersCount} miembros</p>
               </div>
             </div>
 
@@ -101,7 +113,7 @@ export const GroupChatModal: React.FC<GroupChatModalProps> = ({ group, onClose }
                 className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/80 px-2.5 py-1.5 text-xs font-semibold text-rose-400 hover:bg-slate-700 transition"
                 title="Votar por este grupo"
               >
-                <Heart className="h-3.5 w-3.5 fill-rose-500 text-rose-500" />
+                <Heart className="h-3.5 w-3.5 fill-[#F43F5E] text-[#F43F5E]" />
                 <span className="text-white text-xs">{group.upvotesCount}</span>
               </button>
 
@@ -134,7 +146,14 @@ export const GroupChatModal: React.FC<GroupChatModalProps> = ({ group, onClose }
             </p>
             {isAdmin && !isEditingInfo && (
               <button
-                onClick={() => setIsEditingInfo(true)}
+                onClick={() => {
+                  setEditName(group.name);
+                  setEditDesc(group.description);
+                  setEditCoverFile(null);
+                  setEditCoverPreview(group.coverUrl);
+                  setEditError('');
+                  setIsEditingInfo(true);
+                }}
                 className="text-[11px] text-rose-400 hover:underline shrink-0 flex items-center gap-1"
               >
                 <Edit3 className="h-3 w-3" /> Editar
@@ -151,6 +170,29 @@ export const GroupChatModal: React.FC<GroupChatModalProps> = ({ group, onClose }
                   Cancelar
                 </button>
               </div>
+              <img src={editCoverPreview} alt="" className="h-20 w-full rounded-lg object-cover" />
+              <button
+                type="button"
+                onClick={() => coverInputRef.current?.click()}
+                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-rose-500/40 bg-rose-950/30 px-3 py-2 text-[11px] font-semibold text-rose-100"
+              >
+                <ImagePlus className="h-3.5 w-3.5" />
+                Cambiar portada desde el dispositivo
+              </button>
+              <input
+                ref={coverInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={event => {
+                  const file = event.target.files?.[0];
+                  event.target.value = '';
+                  if (!file || !file.type.startsWith('image/')) return;
+                  if (editCoverPreview.startsWith('blob:')) URL.revokeObjectURL(editCoverPreview);
+                  setEditCoverFile(file);
+                  setEditCoverPreview(URL.createObjectURL(file));
+                }}
+              />
               <input
                 type="text"
                 value={editName}
@@ -165,15 +207,39 @@ export const GroupChatModal: React.FC<GroupChatModalProps> = ({ group, onClose }
                 placeholder="Descripción del grupo"
                 rows={2}
               />
+              {editError ? <p className="text-rose-300">{editError}</p> : null}
               <button
-                onClick={() => {
-                  group.name = editName;
-                  group.description = editDesc;
+                type="button"
+                disabled={editBusy}
+                onClick={() => void (async () => {
+                  if (!editName.trim() || editBusy) return;
+                  setEditBusy(true);
+                  setEditError('');
+                  let coverUrl = group.coverUrl;
+                  if (editCoverFile) {
+                    const uploaded = await uploadGroupCover(currentUser.id, editCoverFile);
+                    if (uploaded.error || !uploaded.url) {
+                      setEditError(uploaded.error || 'No se pudo subir la portada.');
+                      setEditBusy(false);
+                      return;
+                    }
+                    coverUrl = uploaded.url;
+                  }
+                  const error = await updateGroup(group.id, {
+                    name: editName.trim(),
+                    description: editDesc.trim(),
+                    coverUrl
+                  });
+                  setEditBusy(false);
+                  if (error) {
+                    setEditError(error);
+                    return;
+                  }
                   setIsEditingInfo(false);
-                }}
-                className="rounded-lg bg-rose-500 px-3 py-1 text-xs font-bold text-white hover:bg-rose-600"
+                })()}
+                className="rounded-lg bg-rose-500 px-3 py-1 text-xs font-bold text-white hover:bg-rose-600 disabled:opacity-60"
               >
-                Guardar Cambios
+                {editBusy ? 'Guardando…' : 'Guardar Cambios'}
               </button>
             </div>
           )}
@@ -191,6 +257,14 @@ export const GroupChatModal: React.FC<GroupChatModalProps> = ({ group, onClose }
             ) : (
               groupMessages.map(msg => {
                 const isMe = msg.senderId === currentUser.id;
+                const sender = users.find(u => u.id === msg.senderId);
+                const visibleName = sender
+                  ? publicName(currentUser.id, sender, matches)
+                  : msg.senderName;
+                const visiblePhoto = sender
+                  ? publicPhoto(currentUser.id, sender, matches)
+                  : msg.senderPhoto;
+                const canOpen = sender ? canSeeRealIdentity(currentUser.id, sender, matches) : false;
                 const senderIsAdmin = group.adminIds.includes(msg.senderId) || group.creatorId === msg.senderId;
 
                 return (
@@ -201,21 +275,23 @@ export const GroupChatModal: React.FC<GroupChatModalProps> = ({ group, onClose }
                     {!isMe && (
                       <button
                         onClick={() => {
-                          const sender = users.find(u => u.id === msg.senderId);
-                          if (sender) setSelectedProfileUser(sender);
+                          if (sender && canOpen) setSelectedProfileUser(sender);
                         }}
-                        className="h-8 w-8 rounded-lg overflow-hidden shrink-0 mt-1 ring-1 ring-slate-700 hover:ring-rose-500 transition"
-                        title="Ver perfil de estudiante"
+                        className="h-8 w-8 rounded-lg overflow-hidden shrink-0 mt-1 ring-1 ring-slate-700 hover:ring-rose-500 transition bg-slate-800"
+                        title={canOpen ? 'Ver perfil de estudiante' : 'Perfil privado'}
                       >
-                        <img
-                          src={
-                            msg.senderPhoto ||
-                            'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80'
-                          }
-                          alt={msg.senderName}
-                          referrerPolicy="no-referrer"
-                          className="h-full w-full object-cover"
-                        />
+                        {visiblePhoto ? (
+                          <img
+                            src={visiblePhoto}
+                            alt={visibleName}
+                            referrerPolicy="no-referrer"
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <span className="flex h-full w-full items-center justify-center text-[10px] font-bold text-slate-400">
+                            A
+                          </span>
+                        )}
                       </button>
                     )}
 
@@ -224,12 +300,11 @@ export const GroupChatModal: React.FC<GroupChatModalProps> = ({ group, onClose }
                         <div className="flex items-center gap-1.5 mb-1 text-[11px] text-slate-400">
                           <button
                             onClick={() => {
-                              const sender = users.find(u => u.id === msg.senderId);
-                              if (sender) setSelectedProfileUser(sender);
+                              if (sender && canOpen) setSelectedProfileUser(sender);
                             }}
                             className="font-semibold text-rose-300 hover:underline"
                           >
-                            {msg.senderName}
+                            {visibleName}
                           </button>
                           {senderIsAdmin && (
                             <span className="rounded bg-amber-500/20 px-1 py-0.2 text-[9px] font-bold text-amber-300">
@@ -292,13 +367,15 @@ export const GroupChatModal: React.FC<GroupChatModalProps> = ({ group, onClose }
 
         {/* Participant Drawer / Inspector */}
         {showParticipants && (
-          <div className="w-80 border-l border-slate-800 bg-slate-900/95 flex flex-col h-full animate-in slide-in-from-right duration-200">
+          <div className="absolute inset-y-0 right-0 z-20 flex h-full w-[min(20rem,100%)] flex-col border-l border-slate-800 bg-slate-900 shadow-2xl animate-in slide-in-from-right duration-200">
             <div className="p-4 border-b border-slate-800 flex items-center justify-between">
               <div>
                 <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300">
                   Participantes ({memberUsers.length})
                 </h4>
-                <p className="text-[11px] text-slate-500">Toca un usuario para ver su perfil público</p>
+                <p className="text-[11px] text-slate-500">
+                  El líder puede eliminar (pueden volver) o bloquear (ya no entran ni ven el grupo).
+                </p>
               </div>
               <button
                 onClick={() => setShowParticipants(false)}
@@ -312,6 +389,8 @@ export const GroupChatModal: React.FC<GroupChatModalProps> = ({ group, onClose }
               {memberUsers.map(member => {
                 const memberIsCreator = member.id === group.creatorId;
                 const memberIsAdmin = group.adminIds.includes(member.id);
+                const visibleName = publicName(currentUser.id, member, matches);
+                const visiblePhoto = publicPhoto(currentUser.id, member, matches);
 
                 return (
                   <div
@@ -322,16 +401,22 @@ export const GroupChatModal: React.FC<GroupChatModalProps> = ({ group, onClose }
                       onClick={() => handleMemberClick(member)}
                       className="flex items-center gap-2.5 text-left min-w-0 flex-1 hover:opacity-90"
                     >
-                      <img
-                        src={member.photoUrl}
-                        alt={member.name}
-                        referrerPolicy="no-referrer"
-                        className="h-9 w-9 rounded-lg object-cover ring-1 ring-slate-700 shrink-0"
-                      />
+                      {visiblePhoto ? (
+                        <img
+                          src={visiblePhoto}
+                          alt={visibleName}
+                          referrerPolicy="no-referrer"
+                          className="h-9 w-9 rounded-lg object-cover ring-1 ring-slate-700 shrink-0"
+                        />
+                      ) : (
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-700 text-[11px] font-bold text-slate-300">
+                          A
+                        </span>
+                      )}
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
                           <p className="text-xs font-semibold text-white truncate max-w-[110px]">
-                            {member.name}
+                            {visibleName}
                           </p>
                           {memberIsCreator ? (
                             <span className="flex items-center gap-0.5 rounded bg-rose-500/20 px-1 py-0.2 text-[9px] font-bold text-rose-300">
@@ -344,7 +429,7 @@ export const GroupChatModal: React.FC<GroupChatModalProps> = ({ group, onClose }
                           ) : null}
                         </div>
                         <p className="text-[10px] text-slate-400 truncate max-w-[130px]">
-                          {member.career}
+                          {visiblePhoto ? member.career : 'Perfil privado'}
                         </p>
                       </div>
                     </button>
@@ -370,14 +455,40 @@ export const GroupChatModal: React.FC<GroupChatModalProps> = ({ group, onClose }
                           </button>
                         ) : null}
 
-                        {/* Expel member */}
-                        <button
-                          onClick={() => kickGroupMember(group.id, member.id)}
-                          className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-700 rounded-lg transition"
-                          title="Expulsar del grupo"
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </button>
+                        {!memberIsCreator && (
+                          <>
+                            <button
+                              onClick={() => {
+                                if (
+                                  confirm(
+                                    `¿Eliminar a ${member.name} del grupo? Podrá volver a unirse.`
+                                  )
+                                ) {
+                                  kickGroupMember(group.id, member.id);
+                                }
+                              }}
+                              className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-700 rounded-lg transition"
+                              title="Eliminar del grupo (puede volver a entrar)"
+                            >
+                              <UserMinus className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (
+                                  confirm(
+                                    `¿Bloquear a ${member.name}? No podrá volver a entrar y este grupo no le aparecerá en el buscador ni en los grupos.`
+                                  )
+                                ) {
+                                  banGroupMember(group.id, member.id);
+                                }
+                              }}
+                              className="p-1.5 text-slate-400 hover:text-rose-300 hover:bg-slate-700 rounded-lg transition"
+                              title="Bloquear: no puede volver a entrar"
+                            >
+                              <Ban className="h-3.5 w-3.5" />
+                            </button>
+                          </>
+                        )}
                       </div>
                     )}
                   </div>

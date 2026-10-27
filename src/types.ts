@@ -1,10 +1,22 @@
 export type VerificationStatus = 'pending' | 'approved' | 'rejected' | 'banned';
 
+export type Seeking =
+  | 'pareja'
+  | 'pareja-abierta'
+  | 'veremos'
+  | 'nada-serio'
+  | 'amigos'
+  | 'pensando';
+
+export type InterestIn = 'mujeres' | 'hombres' | 'todos';
+
 export interface User {
   id: string;
   name: string;
   age: number;
   phone: string;
+  email?: string;
+  adultConfirmed?: boolean;
   university: string;
   career: string;
   semester: number;
@@ -15,12 +27,43 @@ export interface User {
   verificationStatus: VerificationStatus;
   registeredAt: string;
   verificationNotes?: string;
-  blindBio?: string; // Prompt for blind dating
+  blindBio?: string;
   blindIdealSpot?: string;
   role: 'student' | 'admin';
+  gender?: 'mujer' | 'hombre';
+  interestIn?: InterestIn;
+  seeking?: Seeking;
+  groupPlan?: boolean;
+  languages?: string[];
+  zodiac?: string;
+  family?: string;
+  communication?: string[];
+  love?: string[];
+  pets?: string[];
+  drinking?: string;
+  smoking?: string;
+  socials?: string;
+  plusUntil?: string;
+  privateProfile?: boolean;
 }
 
-export type MatchType = 'traditional' | 'blind';
+export interface DiscoveryPrefs {
+  interestIn: InterestIn;
+  ageMin: number;
+  ageMax: number;
+  seeking: Seeking;
+  languages: string[];
+  zodiac: string;
+  family: string;
+  communication: string[];
+  love: string[];
+  pets: string[];
+  drinking: string;
+  smoking: string;
+  socials: string;
+}
+
+export type MatchType = 'traditional' | 'blind' | 'libre';
 
 export interface Match {
   id: string;
@@ -31,11 +74,16 @@ export interface Match {
   lastMessage?: string;
   lastMessageTime?: string;
   unreadCount?: number;
+  revealedAt?: string;
+  revealRequestedBy?: string;
+  revealRequestedAt?: string;
+  revealAskUser1At?: string;
+  revealAskUser2At?: string;
 }
 
 export interface ChatMessage {
   id: string;
-  roomId: string; // matchId or groupId
+  roomId: string;
   senderId: string;
   senderName: string;
   senderPhoto?: string;
@@ -45,7 +93,16 @@ export interface ChatMessage {
   isDeleted?: boolean;
 }
 
-export type GroupCategory = 
+export interface Outreach {
+  id: string;
+  fromId: string;
+  toId: string;
+  kind: 'superlike' | 'note';
+  body?: string;
+  createdAt: string;
+}
+
+export type GroupCategory =
   | 'Anime & Otaku'
   | 'Robótica & Tech'
   | 'Integración Campus'
@@ -68,6 +125,17 @@ export interface Group {
   activeRecentCount: number;
   createdAt: string;
   tags: string[];
+  university: string;
+  inviteCode: string;
+  bannedIds?: string[];
 }
 
-export type ActiveTab = 'traditional' | 'blind' | 'groups' | 'chats' | 'admin' | 'profile';
+export type ActiveTab =
+  | 'traditional'
+  | 'planes'
+  | 'blind'
+  | 'groups'
+  | 'likes'
+  | 'chats'
+  | 'admin'
+  | 'profile';

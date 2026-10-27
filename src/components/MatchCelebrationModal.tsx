@@ -66,7 +66,7 @@ export const MatchCelebrationModal: React.FC = () => {
             </div>
 
             {/* Heart in between */}
-            <div className="absolute z-30 flex h-10 w-10 items-center justify-center rounded-full bg-rose-500 text-white shadow-lg ring-4 ring-slate-900">
+            <div className="absolute z-30 flex h-10 w-10 items-center justify-center rounded-full bg-[#F43F5E] text-white shadow-lg ring-4 ring-slate-900">
               <Heart className="h-5 w-5 fill-white" />
             </div>
 

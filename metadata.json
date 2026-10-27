@@ -1,6 +1,0 @@
-{
-  "name": "Campy - Tinder Universitario",
-  "description": "Plataforma de citas y conexiones universitarias seguras con match tradicional, citas a ciegas y grupos estudiantiles verificados.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}

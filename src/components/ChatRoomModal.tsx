@@ -1,16 +1,17 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Match, ChatMessage, User } from '../types';
+import { ReportSheet } from './ReportSheet';
+import { askedUnblindToday, isBlindLocked } from '../lib/campyDb';
+import { ProfileModal } from './ProfileModal';
 import {
   X,
   Send,
   Lock,
-  Shield,
   Info,
-  MapPin,
-  Sparkles,
   ShieldAlert,
-  GraduationCap
+  Flag,
+  Shield,
+  Eye
 } from 'lucide-react';
 
 interface ChatRoomModalProps {
@@ -26,13 +27,23 @@ export const ChatRoomModal: React.FC<ChatRoomModalProps> = ({ roomId, type, onCl
     matches,
     messages,
     sendMessage,
-    setSelectedProfileUser
+    requestUnblind,
+    respondUnblind
   } = useApp();
 
   const [inputText, setInputText] = useState('');
+  const [reportOpen, setReportOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [unblindError, setUnblindError] = useState('');
+  const [unblindBusy, setUnblindBusy] = useState(false);
 
   const currentMatch = matches.find(m => m.id === roomId);
-  const isBlind = type === 'blind';
+  const locked = isBlindLocked(currentMatch) || (!currentMatch && type === 'blind');
+  const isBlind = locked;
+  const pendingBy = currentMatch?.revealRequestedBy;
+  const iAsked = pendingBy === currentUser.id;
+  const theyAsked = !!pendingBy && pendingBy !== currentUser.id;
+  const usedToday = currentMatch ? askedUnblindToday(currentMatch, currentUser.id) : false;
 
   // Partner user
   const otherUserId = currentMatch
@@ -55,6 +66,16 @@ export const ChatRoomModal: React.FC<ChatRoomModalProps> = ({ roomId, type, onCl
     sendMessage(roomId, `¿Te gustaría que nos viéramos en ${spot}? Es un lugar público y seguro del campus 👍`);
   };
 
+  const runUnblind = async (action: 'ask' | 'accept' | 'decline') => {
+    if (unblindBusy) return;
+    setUnblindBusy(true);
+    setUnblindError('');
+    const error =
+      action === 'ask' ? await requestUnblind(roomId) : await respondUnblind(roomId, action === 'accept');
+    if (error) setUnblindError(error);
+    setUnblindBusy(false);
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200">
       <div className="relative flex h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl bg-slate-900 border border-slate-700/80 shadow-2xl text-white">
@@ -72,7 +93,7 @@ export const ChatRoomModal: React.FC<ChatRoomModalProps> = ({ roomId, type, onCl
             ) : partner ? (
               // Traditional Mode: Clickable photo
               <button
-                onClick={() => setSelectedProfileUser(partner)}
+                onClick={() => setProfileOpen(true)}
                 className="h-10 w-10 rounded-xl overflow-hidden ring-1 ring-slate-700 hover:ring-rose-500 transition shrink-0"
                 title="Ver perfil completo del estudiante"
               >
@@ -94,15 +115,15 @@ export const ChatRoomModal: React.FC<ChatRoomModalProps> = ({ roomId, type, onCl
                       : 'Cita a Ciegas'
                     : partner?.name || 'Estudiante'}
                 </h3>
-                {isBlind ? (
+                {currentMatch?.type === 'blind' && currentMatch.revealedAt ? (
+                  <span className="rounded bg-emerald-500/20 px-1.5 py-0.2 text-[9px] font-bold text-emerald-300 border border-emerald-500/30">
+                    Perfil visible
+                  </span>
+                ) : isBlind ? (
                   <span className="rounded bg-indigo-500/20 px-1.5 py-0.2 text-[9px] font-bold text-indigo-300 border border-indigo-500/30">
                     🔒 Modo Anónimo
                   </span>
-                ) : (
-                  <span className="rounded bg-emerald-500/20 px-1.5 py-0.2 text-[9px] font-bold text-emerald-300 border border-emerald-500/30">
-                    Verificado
-                  </span>
-                )}
+                ) : null}
               </div>
               <p className="text-[11px] text-slate-400 truncate">
                 {partner?.university} · {partner?.career} ({partner?.semester}º sem.)
@@ -113,11 +134,34 @@ export const ChatRoomModal: React.FC<ChatRoomModalProps> = ({ roomId, type, onCl
           <div className="flex items-center gap-2">
             {!isBlind && partner && (
               <button
-                onClick={() => setSelectedProfileUser(partner)}
+                onClick={() => setProfileOpen(true)}
                 className="flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800/80 px-2.5 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-700 hover:text-white transition"
               >
                 <Info className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Ver Perfil</span>
+                <span>Ver Perfil</span>
+              </button>
+            )}
+            {isBlind && !theyAsked && !iAsked && !usedToday && (
+              <button
+                type="button"
+                disabled={unblindBusy}
+                onClick={() => void runUnblind('ask')}
+                className="flex items-center gap-1 rounded-lg border border-indigo-500/40 bg-indigo-950/40 px-2 py-1.5 text-[11px] font-semibold text-indigo-100 hover:bg-indigo-900/60 disabled:opacity-60"
+              >
+                <Eye className="h-3.5 w-3.5" />
+                <span>Pedir quitar ciegas</span>
+              </button>
+            )}
+
+            {partner && (
+              <button
+                type="button"
+                onClick={() => setReportOpen(true)}
+                className="flex h-9 w-9 items-center justify-center rounded-lg border border-rose-500/30 bg-rose-950/30 text-rose-300 hover:bg-rose-600 hover:text-white transition"
+                title="Denunciar"
+                aria-label="Denunciar"
+              >
+                <Flag className="h-4 w-4" />
               </button>
             )}
 
@@ -163,6 +207,43 @@ export const ChatRoomModal: React.FC<ChatRoomModalProps> = ({ roomId, type, onCl
                 </div>
               </div>
             </div>
+          </div>
+        )}
+
+        {isBlind && (
+          <div className="border-b border-indigo-500/20 bg-indigo-950/20 px-4 py-3 text-xs text-indigo-100">
+            {theyAsked ? (
+              <div className="space-y-2">
+                <p className="font-semibold text-indigo-50">
+                  {partner?.name.split(' ')[0] || 'La otra persona'} quiere quitar ciegas para verse el perfil.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={unblindBusy}
+                    onClick={() => void runUnblind('accept')}
+                    className="rounded-full bg-[#F43F5E] px-3 py-1.5 text-[11px] font-bold text-white disabled:opacity-60"
+                  >
+                    Quitar ciegas
+                  </button>
+                  <button
+                    type="button"
+                    disabled={unblindBusy}
+                    onClick={() => void runUnblind('decline')}
+                    className="rounded-full border border-white/15 px-3 py-1.5 text-[11px] font-semibold text-slate-200 disabled:opacity-60"
+                  >
+                    Ahora no
+                  </button>
+                </div>
+              </div>
+            ) : iAsked ? (
+              <p>Pediste quitar ciegas. Esperando a que acepte para verse el perfil.</p>
+            ) : usedToday ? (
+              <p>Ya usaste pedir quitar ciegas hoy. Mañana se desbloquea otra vez.</p>
+            ) : (
+              <p>Una vez al día puedes pedir quitar ciegas. La otra persona decide si se ven el perfil.</p>
+            )}
+            {unblindError ? <p className="mt-2 text-rose-300">{unblindError}</p> : null}
           </div>
         )}
 
@@ -225,6 +306,19 @@ export const ChatRoomModal: React.FC<ChatRoomModalProps> = ({ roomId, type, onCl
           </div>
         </form>
       </div>
+
+      {reportOpen && partner && (
+        <ReportSheet
+          userId={partner.id}
+          userName={partner.name}
+          onClose={() => setReportOpen(false)}
+          onDone={onClose}
+        />
+      )}
+
+      {profileOpen && partner && !isBlind && (
+        <ProfileModal user={partner} onClose={() => setProfileOpen(false)} />
+      )}
     </div>
   );
 };
